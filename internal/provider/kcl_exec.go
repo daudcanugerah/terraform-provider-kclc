@@ -40,7 +40,6 @@ type KclExecResourceModel struct {
 	SourceDir types.String `tfsdk:"source_dir"`
 	Output    types.String `tfsdk:"output"`
 	Args      types.List   `tfsdk:"args"`
-	Timeout   types.Int64  `tfsdk:"timeout"`
 }
 
 func (r *KclExecResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -77,11 +76,6 @@ func (r *KclExecResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				PlanModifiers: []planmodifier.List{
 					listplanmodifier.RequiresReplace(),
 				},
-			},
-			"timeout": schema.Int64Attribute{
-				Optional:            true,
-				MarkdownDescription: "Execution timeout in seconds (default: 300)",
-				PlanModifiers:       []planmodifier.Int64{},
 			},
 		},
 	}
@@ -144,10 +138,6 @@ func (r *KclExecResource) Create(ctx context.Context, req resource.CreateRequest
 
 	// Create execution context with timeout
 	timeout := 300 * time.Second
-	if !plan.Timeout.IsNull() {
-		timeout = time.Duration(plan.Timeout.ValueInt64()) * time.Second
-	}
-
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -173,7 +163,7 @@ func (r *KclExecResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 
 	// Generate unique ID based on inputs
-	idInput := fmt.Sprintf("%s|%s|%v|%v", absPath, kclCommand, args)
+	idInput := fmt.Sprintf("%s|%s|%v", absPath, kclCommand, args)
 	hash := sha256.Sum256([]byte(idInput))
 	plan.ID = types.StringValue(hex.EncodeToString(hash[:16]))
 	plan.Output = types.StringValue(strings.TrimSpace(string(output)))
