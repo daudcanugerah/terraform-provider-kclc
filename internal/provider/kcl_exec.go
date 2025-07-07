@@ -14,6 +14,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -35,13 +36,11 @@ type KclExecResource struct {
 }
 
 type KclExecResourceModel struct {
-	ID          types.String `tfsdk:"id"`
-	SourceDir   types.String `tfsdk:"source_dir"`
-	Output      types.String `tfsdk:"output"`
-	Args        types.List   `tfsdk:"args"`
-	Triggers    types.Map    `tfsdk:"triggers"`
-	Timeout     types.Int64  `tfsdk:"timeout"`
-	Environment types.Map    `tfsdk:"environment"`
+	ID        types.String `tfsdk:"id"`
+	SourceDir types.String `tfsdk:"source_dir"`
+	Output    types.String `tfsdk:"output"`
+	Args      types.List   `tfsdk:"args"`
+	Timeout   types.Int64  `tfsdk:"timeout"`
 }
 
 func (r *KclExecResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -75,24 +74,14 @@ func (r *KclExecResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				ElementType:         types.StringType,
 				Optional:            true,
 				MarkdownDescription: "Additional arguments to pass to KCL command",
-				PlanModifiers:       []planmodifier.List{},
-			},
-			"triggers": schema.MapAttribute{
-				ElementType:         types.StringType,
-				Optional:            true,
-				MarkdownDescription: "Map of values that should trigger re-execution when changed",
-				PlanModifiers:       []planmodifier.Map{},
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.RequiresReplace(),
+				},
 			},
 			"timeout": schema.Int64Attribute{
 				Optional:            true,
 				MarkdownDescription: "Execution timeout in seconds (default: 300)",
 				PlanModifiers:       []planmodifier.Int64{},
-			},
-			"environment": schema.MapAttribute{
-				ElementType:         types.StringType,
-				Optional:            true,
-				MarkdownDescription: "Environment variables to set during execution",
-				PlanModifiers:       []planmodifier.Map{},
 			},
 		},
 	}
@@ -153,21 +142,6 @@ func (r *KclExecResource) Create(ctx context.Context, req resource.CreateRequest
 		}
 	}
 
-	// Prepare environment variables
-	envVars := os.Environ()
-	if !plan.Environment.IsNull() {
-		envMap := make(map[string]string)
-		diags := plan.Environment.ElementsAs(ctx, &envMap, false)
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-
-		for k, v := range envMap {
-			envVars = append(envVars, fmt.Sprintf("%s=%s", k, v))
-		}
-	}
-
 	// Create execution context with timeout
 	timeout := 300 * time.Second
 	if !plan.Timeout.IsNull() {
@@ -180,7 +154,6 @@ func (r *KclExecResource) Create(ctx context.Context, req resource.CreateRequest
 	// Execute command
 	cmd := exec.CommandContext(ctx, kclCommand, args...)
 	cmd.Dir = absPath
-	cmd.Env = envVars
 
 	tflog.Info(ctx, "Executing KCL command", map[string]interface{}{
 		"command":   kclCommand,
