@@ -173,7 +173,7 @@ func (r *KclExecResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 
 	// Generate unique ID based on inputs
-	idInput := fmt.Sprintf("%s|%s|%v|%v", absPath, kclCommand, args, envVars)
+	idInput := fmt.Sprintf("%s|%s|%v|%v", absPath, kclCommand, args)
 	hash := sha256.Sum256([]byte(idInput))
 	plan.ID = types.StringValue(hex.EncodeToString(hash[:16]))
 	plan.Output = types.StringValue(strings.TrimSpace(string(output)))
